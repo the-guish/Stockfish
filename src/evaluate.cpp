@@ -18,6 +18,8 @@
 
 #include "evaluate.h"
 
+#include "club_eval.h"
+
 #include <algorithm>
 #include <cassert>
 #include <cmath>
@@ -38,26 +40,19 @@
 namespace Stockfish {
 
 // Evaluate is the evaluator for the outer world. It returns a static evaluation
-// of the position from the point of view of the side to move.
-Value Eval::evaluate(const Eval::NNUE::Network&     network,
-                     const Position&                pos,
-                     Eval::NNUE::AccumulatorStack&  accumulators,
-                     Eval::NNUE::AccumulatorCaches& caches,
-                     int                            optimism) {
+// of the position from the point of view of the side to move. On this branch
+// it is the club evaluation (club_eval.h): the network is loaded but never
+// asked, and only the fifty-move damping and the tablebase clamp of the
+// original wrapper are kept, so that the search is unchanged.
+Value Eval::evaluate([[maybe_unused]] const Eval::NNUE::Network&     network,
+                     const Position&                                  pos,
+                     [[maybe_unused]] Eval::NNUE::AccumulatorStack&  accumulators,
+                     [[maybe_unused]] Eval::NNUE::AccumulatorCaches& caches,
+                     [[maybe_unused]] int                             optimism) {
 
     assert(!pos.checkers());
 
-    auto [psqt, positional] = network.evaluate(pos, accumulators, caches);
-
-    Value nnue = psqt + positional;
-
-    // Blend optimism and eval with nnue complexity
-    int nnueComplexity = std::abs(psqt - positional);
-    optimism += optimism * i64(nnueComplexity) / 476;
-    nnue -= nnue * i64(nnueComplexity) / 18236;
-
-    int material = 534 * pos.count<PAWN>() + pos.non_pawn_material();
-    int v        = nnue + (nnue * i64(material) + optimism * i64(7675)) / 91000;
+    int v = Club::evaluate(pos);
 
     // Damp down the evaluation linearly when shuffling
     v -= v * pos.rule50_count() / 199;
@@ -71,33 +66,20 @@ Value Eval::evaluate(const Eval::NNUE::Network&     network,
 // Like evaluate(), but instead of returning a value, it returns
 // a string (suitable for outputting to stdout) that contains the detailed
 // descriptions and values of each evaluation term. Useful for debugging.
-// Trace scores are from white's point of view
-std::string Eval::trace(Position& pos, const Eval::NNUE::Network& network) {
-
-    if (pos.checkers())
-        return "Final evaluation: none (in check)";
-
-    auto accumulators = std::make_unique<Eval::NNUE::AccumulatorStack>();
-    auto caches       = std::make_unique<Eval::NNUE::AccumulatorCaches>(network);
+// Trace scores are from white's point of view. The club terms are printed
+// in check as well, where the network's trace declined to, so the port can
+// be checked on any position; the search itself never evaluates in check.
+std::string Eval::trace(Position& pos, [[maybe_unused]] const Eval::NNUE::Network& network) {
 
     std::stringstream ss;
-    ss << std::showpoint << std::noshowpos << std::fixed << std::setprecision(2);
-    ss << '\n' << NNUE::trace(pos, network, *caches) << '\n';
+    ss << Club::trace(pos);
 
-    ss << std::showpoint << std::showpos << std::fixed << std::setprecision(2) << std::setw(15);
-
-    auto [psqt, positional] = network.evaluate(pos, *accumulators, *caches);
-    Value v                 = psqt + positional;
-    ss << "NNUE evaluation          " << v << " (side to move, internal units)\n";
+    int v = Club::evaluate(pos);
+    v -= v * pos.rule50_count() / 199;
     v = pos.side_to_move() == WHITE ? v : -v;
-    ss << "NNUE evaluation        " << 0.01 * UCIEngine::to_cp(v, pos) << " (white side)\n";
-
-    v = evaluate(network, pos, *accumulators, *caches, VALUE_ZERO);
-    v = pos.side_to_move() == WHITE ? v : -v;
-
-    ss << "Final evaluation      ";
-    ss << 0.01 * UCIEngine::to_cp(v, pos) << " (white side)";
-    ss << " [with scaled NNUE, ...]\n";
+    ss << "Final evaluation       " << std::showpos << v << std::noshowpos
+       << " (white side, internal units: centipawns * " << Club::Scale
+       << " / 100, damped by the fifty-move count)\n";
 
     return ss.str();
 }

@@ -30,6 +30,7 @@
 #include <utility>
 #include <vector>
 
+#include "club_eval.h"
 #include "evaluate.h"
 #include "misc.h"
 #include "nnue/network.h"
@@ -135,6 +136,12 @@ Engine::Engine(std::optional<std::filesystem::path> path) :
     options.add(  //
       "EvalFile", Option(EvalFileDefaultName, [this](const Option& o) {
           load_network(path_from_utf8(std::string(o)));
+          return std::nullopt;
+      }));
+
+    options.add(  //
+      "Club Scale", Option(PawnValue, 1, 1000, [](const Option& o) {
+          Club::Scale = int(o);
           return std::nullopt;
       }));
 
@@ -266,6 +273,8 @@ void Engine::set_ponderhit(bool b) { threads.main_manager()->ponder = b; }
 void Engine::verify_network() const {
     const auto file = path_from_utf8(std::string(options["EvalFile"]));
     network->verify(onVerifyNetwork, networkFile, file);
+    onVerifyNetwork("club evaluation (scaccosplicatrice) enabled: the network above is loaded "
+                    "but never evaluated");
 
     auto statuses = network.get_status_and_errors();
     for (usize i = 0; i < statuses.size(); ++i)
