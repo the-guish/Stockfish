@@ -145,6 +145,20 @@ Engine::Engine(std::optional<std::filesystem::path> path) :
           return std::nullopt;
       }));
 
+    // One option per club weight, 0 dropping the count it weighs, and one
+    // switch per term, for trimming experiments
+    for (const Club::WeightOption& w : Club::weight_options())
+        options.add(w.name, Option(w.def, -1000, 1000, [value = w.value](const Option& o) {
+                        *value = int(o);
+                        return std::nullopt;
+                    }));
+
+    for (int i = 0; i < Club::TERM_NB; ++i)
+        options.add(Club::TermOptionNames[i], Option(true, [i](const Option& o) {
+                        Club::Enabled[i] = bool(o);
+                        return std::nullopt;
+                    }));
+
     threads.clear();
     threads.ensure_network_replicated();
     resize_threads();

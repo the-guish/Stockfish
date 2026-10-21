@@ -41,6 +41,48 @@ namespace Stockfish {
 
 namespace Club {
 
+Weights W;
+bool    Enabled[TERM_NB] = {true, true, true, true, true, true, true, true, true, true, true};
+
+const char* const TermOptionNames[TERM_NB] = {
+  "Club Term Material",        "Club Term Bishop Pair",   "Club Term Development",
+  "Club Term Early Queen",     "Club Term Centre",        "Club Term King Shelter",
+  "Club Term Castling Rights", "Club Term Pawn Structure", "Club Term Passed Pawns",
+  "Club Term Open Files",      "Club Term King Activity"};
+
+const std::vector<WeightOption>& weight_options() {
+    static const std::vector<WeightOption> options = {
+      {"Club Pawn", &W.pawn, 100},
+      {"Club Knight", &W.knight, 320},
+      {"Club Bishop", &W.bishop, 330},
+      {"Club Rook", &W.rook, 500},
+      {"Club Queen", &W.queen, 900},
+      {"Club Bishop Pair", &W.bishopPair, 30},
+      {"Club Minor At Home", &W.minorAtHome, -15},
+      {"Club Minor At Home Queen Out", &W.minorAtHomeQueenOut, -10},
+      {"Club Minor In The Centre", &W.minorInTheCentre, 10},
+      {"Club Knight On The Rim", &W.knightOnTheRim, -10},
+      {"Club Pawn In The Centre", &W.pawnInTheCentre, 20},
+      {"Club Shield Pawn", &W.shieldPawn, 15},
+      {"Club King On A Centre File", &W.kingOnACentreFile, -40},
+      {"Club King Off Its Back Rank", &W.kingOffItsBackRank, -20},
+      {"Club Each Further Rank", &W.eachFurtherRank, -20},
+      {"Club Castling Right", &W.castlingRight, 10},
+      {"Club Doubled Pawn", &W.doubledPawn, -15},
+      {"Club Isolated Pawn", &W.isolatedPawn, -15},
+      {"Club Passed Pawn Rank 2", &W.passedPawnOnRank2, 10},
+      {"Club Passed Pawn Rank 3", &W.passedPawnOnRank3, 15},
+      {"Club Passed Pawn Rank 4", &W.passedPawnOnRank4, 25},
+      {"Club Passed Pawn Rank 5", &W.passedPawnOnRank5, 40},
+      {"Club Passed Pawn Rank 6", &W.passedPawnOnRank6, 65},
+      {"Club Passed Pawn Rank 7", &W.passedPawnOnRank7, 100},
+      {"Club Rook On An Open File", &W.rookOnAnOpenFile, 15},
+      {"Club Rook On A Half Open File", &W.rookOnAHalfOpenFile, 8},
+      {"Club Step Toward The Centre", &W.stepTowardTheCentre, 10},
+    };
+    return options;
+}
+
 const char* const TermNames[TERM_NB] = {"material",        "bishop-pair",    "development",
                                         "early-queen",     "centre",         "king-shelter",
                                         "castling-rights", "pawn-structure", "passed-pawns",
@@ -50,27 +92,47 @@ namespace {
 
 constexpr int FullPhase = 24;
 
-// Michniewski's values, by piece type
-constexpr int MaterialValue[PIECE_TYPE_NB] = {0, 100, 320, 330, 500, 900, 0, 0};
-constexpr int PhaseWeight[PIECE_TYPE_NB]   = {0, 0, 1, 1, 2, 4, 0, 0};
+constexpr int PhaseWeight[PIECE_TYPE_NB] = {0, 0, 1, 1, 2, 4, 0, 0};
 
-constexpr int BishopPairBonus         = 30;
-constexpr int MinorAtHome             = -15;
-constexpr int MinorAtHomeQueenOut     = -10;
-constexpr int MinorInTheCentre        = 10;
-constexpr int KnightOnTheRim          = -10;
-constexpr int PawnInTheCentre         = 20;
-constexpr int ShieldPawn              = 15;
-constexpr int KingOnACentreFile       = -40;
-constexpr int KingOffItsBackRank      = -20;
-constexpr int EachFurtherRank         = -20;
-constexpr int CastlingRight           = 10;
-constexpr int DoubledPawn             = -15;
-constexpr int IsolatedPawn            = -15;
-constexpr int PassedPawnOnRank[RANK_NB] = {0, 10, 15, 25, 40, 65, 100, 0};  // by relative rank
-constexpr int RookOnAnOpenFile        = 15;
-constexpr int RookOnAHalfOpenFile     = 8;
-constexpr int StepTowardTheCentre     = 10;
+// Michniewski's values by piece type, from the weights in effect
+int material_value(PieceType pt) {
+    switch (pt)
+    {
+    case PAWN :
+        return W.pawn;
+    case KNIGHT :
+        return W.knight;
+    case BISHOP :
+        return W.bishop;
+    case ROOK :
+        return W.rook;
+    case QUEEN :
+        return W.queen;
+    default :
+        return 0;
+    }
+}
+
+// The passed pawn's worth by its relative rank, from the weights in effect
+int passed_pawn_on(Rank r) {
+    switch (r)
+    {
+    case RANK_2 :
+        return W.passedPawnOnRank2;
+    case RANK_3 :
+        return W.passedPawnOnRank3;
+    case RANK_4 :
+        return W.passedPawnOnRank4;
+    case RANK_5 :
+        return W.passedPawnOnRank5;
+    case RANK_6 :
+        return W.passedPawnOnRank6;
+    case RANK_7 :
+        return W.passedPawnOnRank7;
+    default :
+        return 0;
+    }
+}
 
 // The sixteen central squares, c3 to f6, and the four centre squares
 constexpr Bitboard Central =
@@ -126,24 +188,24 @@ void count_side(const Position& pos, int* t) {
     // material: Michniewski's values
     t[MATERIAL] = 0;
     for (PieceType pt : {PAWN, KNIGHT, BISHOP, ROOK, QUEEN})
-        t[MATERIAL] += MaterialValue[pt] * popcount(pos.pieces(Us, pt));
+        t[MATERIAL] += material_value(pt) * popcount(pos.pieces(Us, pt));
 
     // bishop-pair
-    t[BISHOP_PAIR] = pos.count<BISHOP>(Us) >= 2 ? BishopPairBonus : 0;
+    t[BISHOP_PAIR] = pos.count<BISHOP>(Us) >= 2 ? W.bishopPair : 0;
 
     // development: minors at home (middlegame)
     int atHome     = minors_at_home<Us>(pos);
-    t[DEVELOPMENT] = MinorAtHome * atHome;
+    t[DEVELOPMENT] = W.minorAtHome * atHome;
 
     // early-queen: a queen out (one at least, none at home) costs per minor at home (middlegame)
     bool hasQueen    = pos.count<QUEEN>(Us) > 0;
     bool queenAtHome = pos.pieces(Us, QUEEN) & relative_square(Us, SQ_D1);
-    t[EARLY_QUEEN]   = (hasQueen && !queenAtHome) ? MinorAtHomeQueenOut * atHome : 0;
+    t[EARLY_QUEEN]   = (hasQueen && !queenAtHome) ? W.minorAtHomeQueenOut * atHome : 0;
 
     // centre: minors on the sixteen central squares, knights on the rim, pawns on the four centre squares
-    t[CENTRE] = MinorInTheCentre * popcount(pos.pieces(Us, KNIGHT, BISHOP) & Central)
-              + KnightOnTheRim * popcount(pos.pieces(Us, KNIGHT) & (FileABB | FileHBB))
-              + PawnInTheCentre * popcount(ownPawns & Centre);
+    t[CENTRE] = W.minorInTheCentre * popcount(pos.pieces(Us, KNIGHT, BISHOP) & Central)
+              + W.knightOnTheRim * popcount(pos.pieces(Us, KNIGHT) & (FileABB | FileHBB))
+              + W.pawnInTheCentre * popcount(ownPawns & Centre);
 
     // king-shelter (middlegame): each of the king's file and the two beside it
     // with an own pawn one or two ranks ahead, a king on a centre file, a
@@ -154,12 +216,12 @@ void count_side(const Position& pos, int* t) {
     for (Bitboard f : {shift(file_bb(ksq), WEST), file_bb(ksq), shift(file_bb(ksq), EAST)})
         shield += bool(ownPawns & ahead & f);
     int ranksLeft   = relative_rank(Us, ksq);
-    t[KING_SHELTER] = ShieldPawn * shield
-                    + (file_of(ksq) >= FILE_C && file_of(ksq) <= FILE_F ? KingOnACentreFile : 0)
-                    + (ranksLeft > 0 ? KingOffItsBackRank + EachFurtherRank * (ranksLeft - 1) : 0);
+    t[KING_SHELTER] = W.shieldPawn * shield
+                    + (file_of(ksq) >= FILE_C && file_of(ksq) <= FILE_F ? W.kingOnACentreFile : 0)
+                    + (ranksLeft > 0 ? W.kingOffItsBackRank + W.eachFurtherRank * (ranksLeft - 1) : 0);
 
     // castling-rights (middlegame)
-    t[CASTLING_RIGHTS] = CastlingRight
+    t[CASTLING_RIGHTS] = W.castlingRight
                        * (pos.can_castle(Us & KING_SIDE) + pos.can_castle(Us & QUEEN_SIDE));
 
     // pawn-structure: doubled and isolated
@@ -172,7 +234,7 @@ void count_side(const Position& pos, int* t) {
         if (n > 0 && !(ownPawns & adjacent_files(make_square(f, RANK_1))))
             isolated += n;
     }
-    t[PAWN_STRUCTURE] = DoubledPawn * doubled + IsolatedPawn * isolated;
+    t[PAWN_STRUCTURE] = W.doubledPawn * doubled + W.isolatedPawn * isolated;
 
     // passed-pawns, by the rank counted from the pawn's own side
     t[PASSED_PAWNS] = 0;
@@ -180,7 +242,7 @@ void count_side(const Position& pos, int* t) {
     {
         Square s = pop_lsb(b);
         if (!(theirPawns & passed_pawn_span(Us, s)))
-            t[PASSED_PAWNS] += PassedPawnOnRank[relative_rank(Us, s)];
+            t[PASSED_PAWNS] += passed_pawn_on(relative_rank(Us, s));
     }
 
     // open-files: rooks on files with no own pawn, with or without an enemy pawn
@@ -190,12 +252,12 @@ void count_side(const Position& pos, int* t) {
         Square s = pop_lsb(b);
         if (ownPawns & file_bb(s))
             continue;
-        t[OPEN_FILES] += (theirPawns & file_bb(s)) ? RookOnAHalfOpenFile : RookOnAnOpenFile;
+        t[OPEN_FILES] += (theirPawns & file_bb(s)) ? W.rookOnAHalfOpenFile : W.rookOnAnOpenFile;
     }
 
     // king-activity (ending): 3 less the king's steps to the nearest centre square
     int steps = std::max(std::abs(2 * file_of(ksq) - 7), std::abs(2 * rank_of(ksq) - 7)) / 2;
-    t[KING_ACTIVITY] = StepTowardTheCentre * (3 - steps);
+    t[KING_ACTIVITY] = W.stepTowardTheCentre * (3 - steps);
 }
 
 }  // namespace
@@ -216,7 +278,7 @@ Scores score(const Position& pos) {
             difference = toward_zero(difference * scores.phase, FullPhase);
         else if (i == KING_ACTIVITY)
             difference = toward_zero(difference * (FullPhase - scores.phase), FullPhase);
-        scores.term[i] = difference;
+        scores.term[i] = Enabled[i] ? difference : 0;
     }
     return scores;
 }
@@ -260,7 +322,7 @@ std::string trace(const Position& pos) {
     {
         total += scores.term[i];
         ss << "| " << std::left << std::setw(15) << TermNames[i] << std::right << " | "
-           << std::setw(11) << scores.term[i] << " |\n";
+           << std::setw(11) << scores.term[i] << (Enabled[i] ? " |" : " | off") << "\n";
     }
     ss << "+-----------------+-------------+\n"
        << "| " << std::left << std::setw(15) << "total" << std::right << " | " << std::setw(11)
@@ -269,6 +331,24 @@ std::string trace(const Position& pos) {
 
     ss << "\nClub evaluation        " << std::showpos << total << std::noshowpos
        << " (white side, centipawns)\n";
+
+    // The weights that are not the club's, so a trimmed setting can be checked
+    bool changed = false;
+    for (const WeightOption& w : weight_options())
+        if (*w.value != w.def)
+        {
+            ss << (changed ? ", " : "Weights changed: ") << w.name << " " << *w.value << " (was "
+               << w.def << ")";
+            changed = true;
+        }
+    for (int i = 0; i < TERM_NB; ++i)
+        if (!Enabled[i])
+        {
+            ss << (changed ? ", " : "Weights changed: ") << TermNames[i] << " off";
+            changed = true;
+        }
+    if (changed)
+        ss << "\n";
     return ss.str();
 }
 

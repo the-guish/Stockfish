@@ -30,6 +30,7 @@
 #define CLUB_EVAL_H_INCLUDED
 
 #include <string>
+#include <vector>
 
 #include "types.h"
 
@@ -56,6 +57,55 @@ enum Term {
 };
 
 extern const char* const TermNames[TERM_NB];
+
+// The 27 weights, each settable through a UCI option named "Club <Weight>",
+// 0 dropping the count it weighs; and one switch per term, "Club Term
+// <term>", false dropping the whole term. Both are for trimming experiments:
+// the defaults are the club's.
+struct Weights {
+    int pawn               = 100;
+    int knight             = 320;
+    int bishop             = 330;
+    int rook               = 500;
+    int queen              = 900;
+    int bishopPair         = 30;
+    int minorAtHome        = -15;
+    int minorAtHomeQueenOut = -10;
+    int minorInTheCentre   = 10;
+    int knightOnTheRim     = -10;
+    int pawnInTheCentre    = 20;
+    int shieldPawn         = 15;
+    int kingOnACentreFile  = -40;
+    int kingOffItsBackRank = -20;
+    int eachFurtherRank    = -20;
+    int castlingRight      = 10;
+    int doubledPawn        = -15;
+    int isolatedPawn       = -15;
+    int passedPawnOnRank2  = 10;
+    int passedPawnOnRank3  = 15;
+    int passedPawnOnRank4  = 25;
+    int passedPawnOnRank5  = 40;
+    int passedPawnOnRank6  = 65;
+    int passedPawnOnRank7  = 100;
+    int rookOnAnOpenFile   = 15;
+    int rookOnAHalfOpenFile = 8;
+    int stepTowardTheCentre = 10;
+};
+
+extern Weights W;
+extern bool    Enabled[TERM_NB];
+
+struct WeightOption {
+    const char* name;   // the UCI option, "Club Pawn"
+    int*        value;  // the weight it sets
+    int         def;    // the club's value
+};
+
+// Every weight with its option name and default, in the order of Weights.
+const std::vector<WeightOption>& weight_options();
+
+// The UCI option of each term's switch, "Club Term Material".
+extern const char* const TermOptionNames[TERM_NB];
 
 struct Scores {
     int term[TERM_NB];  // each term's centipawns for White
