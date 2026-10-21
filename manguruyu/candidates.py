@@ -71,7 +71,7 @@ def main() -> int:
     if both or args.terms:
         for name in terms:
             short = name[len("Club Term "):]
-            blocks.append(table(f"{args.prefix}-without-{slug(short)}", args.command, args.go, {name: "false"}, f"the {short.lower()} term switched off"))
+            blocks.append(table(f"{args.prefix}-without-{slug(short)}", args.command, args.go, {name: "\"false\""}, f"the {short.lower()} term switched off"))
     sys.stdout.write("\n".join(blocks))
     return 0
 
